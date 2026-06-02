@@ -71,7 +71,8 @@ def pct(a, b):
 total      = df['工时'].sum()
 records    = len(df)
 projCount  = df[col_map['项目名称']].dropna().nunique()
-workDays   = df[col_map['发生时间']].dropna().dt.date.nunique()
+workDates  = df[col_map['发生时间']].dropna()
+workDays   = workDates[workDates.dt.weekday < 5].dt.date.nunique()  # 只算工作日（周一~周五）
 maintTotal = df[df[col_map['工作类型']]=='维护']['工时'].sum()
 highValue  = df[df[col_map['工作类型']].isin(['数字化升级','项目实施','售前','项目管理'])]['工时'].sum()
 highValuePct = pct(highValue, total)
@@ -126,7 +127,7 @@ for i,n in enumerate(creatorNames):
     creatorValue.append({'name':n,'total':t,'high':round(high,1),'low':round(low,1),
                          'highPct':pct(high,t),'lowPct':pct(low,t)})
 
-stdHours = 168
+stdHours = workDays * 8   # 按实际工作日数动态计算标准工时
 creatorStd = []
 for i,n in enumerate(creatorNames):
     a = creatorTotalHours[i]

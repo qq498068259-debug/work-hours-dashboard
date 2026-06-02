@@ -2,7 +2,7 @@ var D = {
   "total": 598.6,
   "records": 329,
   "projCount": 20,
-  "workDays": 24,
+  "workDays": 19,
   "maintTotal": 119.2,
   "p0Daily": 6.0,
   "allDaily": 24.9,
@@ -620,9 +620,9 @@ var D = {
   "hmTypes": [
     "沟通答疑",
     "bug研发解决",
-    "培训",
-    "bug版本升级",
     "硬件网络",
+    "bug版本升级",
+    "培训",
     "设置调整"
   ],
   "hmData": [
@@ -637,14 +637,14 @@ var D = {
       4.0
     ],
     [
-      2,
-      0,
-      1.0
-    ],
-    [
       3,
       0,
       2.0
+    ],
+    [
+      4,
+      0,
+      1.0
     ],
     [
       5,
@@ -679,12 +679,12 @@ var D = {
     [
       2,
       2,
-      4.0
+      1.0
     ],
     [
       4,
       2,
-      1.0
+      4.0
     ],
     [
       0,
@@ -757,7 +757,7 @@ var D = {
       1.0
     ],
     [
-      4,
+      2,
       10,
       1.5
     ],
@@ -1115,38 +1115,38 @@ var D = {
       "lowPct": 15.7
     }
   ],
-  "stdHours": 168,
+  "stdHours": 152,
   "creatorStd": [
     {
       "name": "吕洪飞",
       "actual": 168.0,
-      "std": 168,
-      "pct": 100.0,
-      "diff": 0.0,
-      "status": "ok"
+      "std": 152,
+      "pct": 110.5,
+      "diff": 16.0,
+      "status": "over"
     },
     {
       "name": "李泽垣",
       "actual": 137.2,
-      "std": 168,
-      "pct": 81.7,
-      "diff": -30.8,
+      "std": 152,
+      "pct": 90.3,
+      "diff": -14.8,
       "status": "ok"
     },
     {
       "name": "李洋冰",
       "actual": 153.4,
-      "std": 168,
-      "pct": 91.3,
-      "diff": -14.6,
-      "status": "ok"
+      "std": 152,
+      "pct": 100.9,
+      "diff": 1.4,
+      "status": "over"
     },
     {
       "name": "陈海涛",
       "actual": 140.0,
-      "std": 168,
-      "pct": 83.3,
-      "diff": -28.0,
+      "std": 152,
+      "pct": 92.1,
+      "diff": -12.0,
       "status": "ok"
     }
   ],
