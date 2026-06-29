@@ -3,6 +3,22 @@ import json
 import glob, os, re, time
 from collections import defaultdict
 
+# 价值工时权重
+TYPE_WEIGHT = {'数字化升级':5,'项目管理':4,'项目实施':3,'售前':2,'维护':1,'学习/内部例会':1}
+LEVEL_WEIGHT = {'P0':4,'P1':3,'P2':2,'P3':1,'普通级':1}
+
+def calc_value_work(h, wt, lv):
+    tw = TYPE_WEIGHT.get(wt, 1)
+    lw = LEVEL_WEIGHT.get(lv, 2)  # 空值默认2
+    return round(h * tw * lw, 1)
+
+def value_grade(avg_factor):
+    if avg_factor >= 4.0: return 'S'
+    if avg_factor >= 3.0: return 'A'
+    if avg_factor >= 2.0: return 'B'
+    if avg_factor >= 1.5: return 'C'
+    return 'D'
+
 # ===== 通用处理函数：输入Excel路径，输出数据字典 D =====
 def process_excel(filepath):
     df = pd.read_excel(filepath, sheet_name='项目工时登记数据')
@@ -32,6 +48,11 @@ def process_excel(filepath):
     df['工时'] = pd.to_numeric(df[col_map['工时']], errors='coerce').fillna(0)
     df['维护类型_fill'] = df[col_map['维护类型']].fillna('未填写')
 
+    # 计算每行的价值工时
+    def calc_row(row):
+        return calc_value_work(row['工时'], row[col_map['工作类型']], row[col_map['项目等级']])
+    df['价值工时'] = df.apply(calc_row, axis=1)
+
     minDate = df[col_map['发生时间']].min().strftime('%Y-%m-%d')
     maxDate = df[col_map['发生时间']].max().strftime('%Y-%m-%d')
 
@@ -51,6 +72,7 @@ def process_excel(filepath):
     p0_daily = df[df[col_map['项目等级']]=='P0'].groupby(df[col_map['发生时间']].dt.date)['工时'].sum()
     p0Daily  = round(p0_daily.mean(), 1) if len(p0_daily) > 0 else 0
     allDaily = round(df.groupby(df[col_map['发生时间']].dt.date)['工时'].sum().mean(), 1)
+    totalValue = df['价值工时'].sum()
 
     # 2. 工作类型饼图
     typeColors = {'维护':'#F7764A','项目管理':'#FA8C16','数字化升级':'#4A6CF7',
@@ -63,7 +85,7 @@ def process_excel(filepath):
         if pd.isna(name): continue
         h  = round(g['工时'].sum(),1)
         m  = round(g[g[col_map['工作类型']]=='维护']['工时'].sum(),1)
-        v  = round(g[g[col_map['工作类型']].isin(['数字化升级','项目实施','售前','项目管理'])]['工时'].sum(),1)
+        v  = round(g['价值工时'].sum(),1)
         lv = g[col_map['项目等级']].dropna().iloc[0] if g[col_map['项目等级']].dropna().shape[0]>0 else '普通级'
         projMap[name] = {'h':h,'m':m,'v':v,'lv':lv}
     projSorted   = sorted(projMap.items(), key=lambda x: -x[1]['h'])
@@ -86,13 +108,17 @@ def process_excel(filepath):
     for n in creatorNames:
         g = df[df[col_map['负责人']]==n]
         creatorTypeMatrix.append([round(g[g[col_map['工作类型']]==wt]['工时'].sum(),1) for wt in workTypes])
+    # 价值工时（人员）
     creatorValue = []
+    creatorValue2 = []
     for i,n in enumerate(creatorNames):
         t    = creatorTotalHours[i]
-        high = creatorTypeMatrix[i][1] + creatorTypeMatrix[i][2] + creatorTypeMatrix[i][3] + creatorTypeMatrix[i][5]
-        low  = creatorTypeMatrix[i][0]
-        creatorValue.append({'name':n,'total':t,'high':round(high,1),'low':round(low,1),
-                             'highPct':pct(high,t),'lowPct':pct(low,t)})
+        vw   = round(df[df[col_map['负责人']]==n]['价值工时'].sum(),1)
+        avgf = round(vw/t, 2) if t > 0 else 0
+        grade = value_grade(avgf)
+        creatorValue.append({'name':n,'total':t,'high':0,'low':0,
+                             'highPct':0,'lowPct':0})
+        creatorValue2.append({'name':n,'total':t,'valueWork':vw,'avgFactor':avgf,'grade':grade})
     stdHours = workDays * 8
     creatorStd = []
     for i,n in enumerate(creatorNames):
@@ -105,10 +131,10 @@ def process_excel(filepath):
     for n in creatorNames:
         g = df[df[col_map['负责人']]==n]
         top = g.groupby(col_map['项目名称'])['工时'].sum().sort_values(ascending=False).head(3)
-        creatorProjTop3.append([[nm,round(hh,1)] for nm,hh in top.items()])
+        creatorProjTop3.append([[nm,round(h,1)] for nm,hh in top.items()])
     # 动态维护类型列表
     maintTypeList = []
-    for mt in df[df[col_map['工作类型']]=='维护'][col_map['维护类型']].fillna('未填写'):
+    for mt in df[df[col_map['工作类型']]=='维护']['维护类型_fill'].dropna().unique():
         if mt not in maintTypeList:
             maintTypeList.append(mt)
     creatorMaintMatrix = []
@@ -135,10 +161,10 @@ def process_excel(filepath):
         deptValue = []
         for i,d in enumerate(deptNames):
             t    = deptTotalHours[i]
-            high = deptTypeMatrix[i][1] + deptTypeMatrix[i][2] + deptTypeMatrix[i][3] + deptTypeMatrix[i][5]
-            low  = deptTypeMatrix[i][0]
-            deptValue.append({'name':d,'total':t,'high':round(high,1),'low':round(low,1),
-                              'highPct':pct(high,t),'lowPct':pct(low,t)})
+            vw   = round(df[df[dept_col]==d]['价值工时'].sum(),1)
+            avgf = round(vw/t,2) if t > 0 else 0
+            grade = value_grade(avgf)
+            deptValue.append({'name':d,'total':t,'valueWork':vw,'avgFactor':avgf,'grade':grade})
         deptMaintMatrix = []
         for d in deptNames:
             g = df[(df[dept_col]==d)&(df[col_map['工作类型']]=='维护')]
@@ -151,7 +177,7 @@ def process_excel(filepath):
         for d in deptNames:
             g = df[df[dept_col]==d]
             top = g.groupby(col_map['项目名称'])['工时'].sum().sort_values(ascending=False).head(3)
-            deptProjTop3.append([[nm,round(hh,1)] for nm,hh in top.items()])
+            deptProjTop3.append([[nm,round(h,1)] for nm,hh in top.items()])
     else:
         deptNames = []; deptTotalHours = []; deptTypeMatrix = []; deptValue = []
         deptMaintMatrix = []; deptLevelMatrix = []; deptProjTop3 = []
@@ -223,35 +249,41 @@ def process_excel(filepath):
     dailyLearn  = [round(dailyMap[d].get('学习/内部例会',0),1) for d in allDates]
     dailySale  = [round(dailyMap[d].get('售前',0),1) for d in allDates]
 
-    # 9. 价值分层
-    valueLayer = [
-        ['高价值产出(数字化+实施+售前+项目管理)', round(highValue,1), '#52C41A'],
-        ['学习/内部例会', round(df[df[col_map['工作类型']].isin(['学习/内部例会'])]['工时'].sum(),1), '#4A6CF7'],
-    ]
-    for name, g in df[df[col_map['工作类型']]=='维护'].groupby('维护类型_fill'):
-        vc = '#FA8C16' if 'bug' in str(name).lower() else '#F7764A'
-        valueLayer.append([name, round(g['工时'].sum(),1), vc])
-    other = df[~df[col_map['工作类型']].isin(['维护','项目管理','数字化升级','项目实施','学习/内部例会','售前'])]['工时'].sum()
-    valueLayer.append(['其他', round(other,1), '#D9D9D9'])
-    top10Value = sorted([[n,round(projValuePct[i],1),round(projMaintPct[i],1),round(100-projValuePct[i]-projMaintPct[i],1)] for i,n in enumerate(projNames)], key=lambda x:-x[1])[:10]
+    # 9. 价值工时分析（新增）
+    # 项目价值排名
+    projValueMap = {}
+    for name, g in df.groupby(col_map['项目名称']):
+        if pd.isna(name): continue
+        t = round(g['工时'].sum(),1)
+        vw = round(g['价值工时'].sum(),1)
+        avgf = round(vw/t,2) if t > 0 else 0
+        lv = g[col_map['项目等级']].dropna().iloc[0] if g[col_map['项目等级']].dropna().shape[0]>0 else '普通级'
+        projValueMap[name] = {'total':t,'valueWork':vw,'avgFactor':avgf,'grade':value_grade(avgf),'lv':lv}
+    projValue2 = sorted(projValueMap.values(), key=lambda x:-x['valueWork'])
+
+    # 类型价值分布
+    typeValue = [[wt, round(df[df[col_map['工作类型']]==wt]['价值工时'].sum(),1)] for wt in workTypes if df[df[col_map['工作类型']]==wt]['价值工时'].sum() > 0]
+
+    # 等级价值分布
+    levelValue = [[lv, round(df[df[col_map['项目等级']]==lv]['价值工时'].sum(),1)] for lv in levelOrder if lv in df[col_map['项目等级']].values]
 
     return dict(
         total=round(total,1), records=records, projCount=projCount, workDays=workDays,
         maintTotal=round(maintTotal,1), p0Daily=p0Daily, allDaily=allDaily,
         highValue=round(highValue,1), highValuePct=highValuePct, optimizable=round(optimizable,1),
+        totalValue=round(totalValue,1),
         typePie=typePie, typeColors=typeColors,
         projNames=projNames, projHours=projHours, projMaint=projMaint,
         projMaintPct=projMaintPct, projValuePct=projValuePct, projLevel=projLevel,
-        projValue=projValue,
+        projValue=projValue, projValue2=projValue2,
         maintType=maintType, prodLine=prodLine, maintReason=maintReason, maintLevel=maintLevel,
         maintClass=maintClass, goutClass=goutClass, projMaintClass=projMaintClass,
-        valueLayer=valueLayer, top10Value=top10Value,
         hmProjs=hmProjs, hmTypes=hmTypes, hmData=hmData,
         dailyDates=dailyDates, dailyMaint=dailyMaint, dailyPM=dailyPM,
         dailyDigital=dailyDigital, dailyImpl=dailyImpl, dailyLearn=dailyLearn, dailySale=dailySale,
         creatorNames=creatorNames, creatorTotalHours=creatorTotalHours,
         workTypes=workTypes, creatorTypeMatrix=creatorTypeMatrix,
-        creatorProjTop3=creatorProjTop3, creatorValue=creatorValue,
+        creatorProjTop3=creatorProjTop3, creatorValue=creatorValue, creatorValue2=creatorValue2,
         stdHours=stdHours, creatorStd=creatorStd,
         minDate=minDate, maxDate=maxDate, pmTotal=pmTotal,
         pmByProject=pmByProject, pmByCreator=pmByCreator,
@@ -261,6 +293,7 @@ def process_excel(filepath):
         deptTypeMatrix=deptTypeMatrix, deptValue=deptValue,
         deptMaintMatrix=deptMaintMatrix, deptLevelMatrix=deptLevelMatrix,
         deptProjTop3=deptProjTop3,
+        typeValue=typeValue, levelValue=levelValue,
     )
 
 # ===== 文件路径 =====
