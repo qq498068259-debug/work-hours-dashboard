@@ -315,13 +315,13 @@ with open('data.js', 'w', encoding='utf-8') as fout:
     if D_prev is not None:
         fout.write('var D_prev = ' + to_js(D_prev) + ';\n')
     else:
-        fout.write('// 上月数据未配置\n')
+        fout.write('var D_prev = null;\n')
 
 print('data.js 生成成功')
 if D_prev is not None:
     print('  （含本月+上月数据）')
 else:
-    print('  （仅本月数据）')
+    print('  （仅本月数据，D_prev=null）')
 
 # ===== 自动更新 dashboard.html 缓存时间戳 =====
 TIMESTAMP = int(time.time())
