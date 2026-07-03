@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工时分析看板</title>
+<script src="echarts.min.js"></script>
+<script src="data.js?v=1783047690"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:#242B30;color:#E5E7EB}
+.header{background:linear-gradient(135deg,#3B4A5C 0%,#242B30 100%);color:#F9FAFB;padding:28px 40px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.header h1{font-size:24px;font-weight:700;letter-spacing:1px}
+.header p{font-size:13px;opacity:.82;margin-top:6px}
+.kpi-row{display:flex;gap:20px;padding:24px 40px 0;flex-wrap:wrap}
+.kpi-card{flex:1;min-width:180px;background:#2D353C;border-radius:14px;padding:20px 24px;box-shadow:0 2px 12px rgba(0,0,0,.2);position:relative;overflow:hidden;border:1px solid #3A4249}
+.kpi-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px}
+.kpi-card:nth-child(1)::before{background:#667eea}
+.kpi-card:nth-child(2)::before{background:#F59E0B}
+.kpi-card:nth-child(3)::before{background:#10B981}
+.kpi-card:nth-child(4)::before{background:#EF4444}
+.kpi-card:nth-child(5)::before{background:#8B5CF6}
+.kpi-label{font-size:12px;color:#9CA3AF;margin-bottom:6px;font-weight:500}
+.kpi-value{font-size:28px;font-weight:700;color:#F9FAFB}
+.kpi-sub{font-size:11px;color:#6B7280;margin-top:4px}
+.kpi-cmp{font-size:11px;margin-top:6px;padding:3px 8px;border-radius:6px;display:inline-block}
+.cmp-up{background:#065F46;color:#34D399}.cmp-down{background:#7F1D1D;color:#FCA5A5}.cmp-same{background:#374151;color:#9CA3AF}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:24px 40px 0}
+.grid1{display:grid;grid-template-columns:1fr;gap:24px;padding:24px 40px 0}
+.card{background:#2D353C;border-radius:16px;padding:20px 24px 24px;box-shadow:0 2px 12px rgba(0,0,0,.2);border:1px solid #3A4249}
+.card h2{font-size:15px;font-weight:600;color:#F9FAFB;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #3A4249;display:flex;align-items:center;gap:8px}
+.chart-box{width:100%;height:340px}
+.chart-box-tall{width:100%;height:420px}
+.insight-box{background:#1E2529;border-radius:10px;padding:14px 18px;margin-top:14px;font-size:12.5px;line-height:1.8;color:#D1D5DB;border:1px solid #3A4249}
+.insight-box strong{color:#F9FAFB}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:10px;color:#E5E7EB}
+th{background:#1E2529;color:#9CA3AF;font-weight:600;padding:8px 10px;text-align:left;border-bottom:2px solid #3A4249}
+td{padding:8px 10px;border-bottom:1px solid #3A4249;color:#D1D5DB}
+tr:hover td{background:#374151}
+.pct-bar{height:6px;background:#374151;border-radius:3px;margin-top:4px}
+.pct-fill{height:100%;border-radius:3px;transition:width .4s}
+.tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+.tag-blue{background:#1E3A5F;color:#60A5FA}.tag-green{background:#065F46;color:#34D399}.tag-orange{background:#7C2D12;color:#FBBF24}.tag-red{background:#7F1D1D;color:#FCA5A5}.tag-purple{background:#3B2764;color:#A78BFA}
+.section-title{padding:20px 40px 0;font-size:13px;font-weight:600;color:#9CA3AF;letter-spacing:.5px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}.kpi-row{flex-wrap:wrap}.kpi-card{min-width:45%}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 项目工时分析看板</h1>
+  <p id="period"></p>
+</div>
+
+<!-- KPI卡片 -->
+<div class="kpi-row">
+  <div class="kpi-card"><div class="kpi-label">⏱ 总工时</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-sub" id="kpi-days"></div></div>
+  <div class="kpi-card"><div class="kpi-label">📦 记录数</div><div class="kpi-value" id="kpi-records">—</div><div class="kpi-sub" id="kpi-projcnt"></div></div>
+  <div class="kpi-card"><div class="kpi-label">🔧 维护工时</div><div class="kpi-value" id="kpi-maint">—</div><div class="kpi-sub" id="kpi-maint-pct"></div></div>
+  <div class="kpi-card"><div class="kpi-label">🚀 高价值工时</div><div class="kpi-value" id="kpi-high">—</div><div class="kpi-sub" id="kpi-high-pct"></div></div>
+  <div class="kpi-card"><div class="kpi-label">💎 总价值工时</div><div class="kpi-value" id="kpi-totalValue">—</div><div class="kpi-sub" id="kpi-avg-daily"></div></div>
+</div>
+
+<!-- 一、工作类型分布 -->
+<div class="section-title">一、工作类型分布</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>📊 工时占比 · 饼图</h2><div id="chart-type-pie" class="chart-box"></div></div>
+  <div class="card"><h2>📋 工时占比 · 明细</h2><div id="table-type" style="overflow-y:auto;max-height:380px"></div></div>
+</div>
+
+<!-- 二、📊 5月 vs 6月 同比对比分析 -->
+<div class="section-title">二、📊 5月 vs 6月 同比对比分析</div>
+<div class="kpi-row" id="comp-kpi-row">
+  <div class="kpi-card"><div class="kpi-label">📈 总工时变化</div><div class="kpi-value" id="kpi-comp-total">—</div><div class="kpi-sub" id="kpi-comp-total-sub">—</div></div>
+  <div class="kpi-card"><div class="kpi-label">📝 记录数变化</div><div class="kpi-value" id="kpi-comp-records">—</div><div class="kpi-sub" id="kpi-comp-records-sub">—</div></div>
+  <div class="kpi-card"><div class="kpi-label">🏗 项目数变化</div><div class="kpi-value" id="kpi-comp-proj">—</div><div class="kpi-sub" id="kpi-comp-proj-sub">—</div></div>
+  <div class="kpi-card"><div class="kpi-label">📅 日均工时</div><div class="kpi-value" id="kpi-comp-daily">—</div><div class="kpi-sub" id="kpi-comp-daily-sub">—</div></div>
+  <div class="kpi-card"><div class="kpi-label">💎 价值工时变化</div><div class="kpi-value" id="kpi-comp-value">—</div><div class="kpi-sub" id="kpi-comp-value-sub">—</div></div>
+</div>
+<div class="grid2">
+  <div class="card"><h2>📊 工作类型对比</h2><div id="chart-comp-type" class="chart-box"></div></div>
+  <div class="card"><h2>👤 人员工时对比</h2><div id="chart-comp-creator" class="chart-box"></div></div>
+</div>
+<div class="section-title" style="padding-top:4px">👤 组员工作类型同比对比</div>
+<div class="grid2" style="padding-top:16px" id="comp-creator-type-grid">
+  <div class="card"><h2 id="comp-ct-label-0">—</h2><div id="chart-comp-ct-0" class="chart-box"></div></div>
+  <div class="card"><h2 id="comp-ct-label-1">—</h2><div id="chart-comp-ct-1" class="chart-box"></div></div>
+  <div class="card"><h2 id="comp-ct-label-2">—</h2><div id="chart-comp-ct-2" class="chart-box"></div></div>
+  <div class="card"><h2 id="comp-ct-label-3">—</h2><div id="chart-comp-ct-3" class="chart-box"></div></div>
+</div>
+
+<!-- 三、项目工时分析 -->
+<div class="section-title">三、项目工时分析</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>🏆 项目工时 Top10</h2><div id="chart-proj-top10" class="chart-box"></div></div>
+  <div class="card"><h2>📋 全部项目明细</h2><div id="table-proj" style="overflow-y:auto;max-height:400px"></div></div>
+</div>
+
+<!-- 四、人员工时分析 -->
+<div class="section-title">四、人员工时分析</div>
+<div class="grid1" style="padding-top:16px">
+  <div class="card"><h2>👥 人员工时堆叠（按工作类型）</h2><div id="chart-creator-bar" class="chart-box-tall"></div></div>
+</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>🏆 人员价值工时排名</h2><div id="table-creator-value" style="overflow-y:auto;max-height:400px"></div></div>
+  <div class="card"><h2>⏰ 人员标准工时达标率</h2><div id="table-creator-std" style="overflow-y:auto;max-height:400px"></div></div>
+</div>
+
+<!-- 五、项目管理工时分析 -->
+<div class="section-title">五、项目管理工时分析</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>📊 项目PM工时</h2><div id="chart-pm-proj" class="chart-box"></div></div>
+  <div class="card"><h2>👤 负责人PM工时</h2><div id="chart-pm-creator" class="chart-box"></div></div>
+</div>
+
+<!-- 六、维护分析 -->
+<div class="section-title">六、维护分析</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>🔧 维护类型分布</h2><div id="chart-maint-type" class="chart-box"></div></div>
+  <div class="card"><h2>🏭 业务线分布</h2><div id="chart-maint-biz" class="chart-box"></div></div>
+</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>📋 维护原因分布</h2><div id="table-maint-reason" style="overflow-y:auto;max-height:360px"></div></div>
+  <div class="card"><h2>🏅 维护项目等级分布</h2><div id="chart-maint-level" class="chart-box"></div></div>
+</div>
+
+<!-- 七、维护类型细化（热力图） -->
+<div class="section-title">七、维护类型细化</div>
+<div class="grid1" style="padding-top:16px">
+  <div class="card"><h2>🔥 项目 × 维护类型 工时热力图（Top15维护项目）</h2><div id="chart-heatmap" class="chart-box-tall"></div></div>
+</div>
+
+<!-- 八、每日工时趋势 -->
+<div class="section-title">八、每日工时趋势</div>
+<div class="grid1" style="padding-top:16px">
+  <div class="card"><h2>📈 每日各工作类型工时趋势</h2><div id="chart-daily" class="chart-box-tall"></div></div>
+</div>
+
+<!-- 九、价值工时分析 -->
+<div class="section-title">九、价值工时分析</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>🏆 人员价值排名</h2><div id="table-value-creator" style="overflow-y:auto;max-height:400px"></div></div>
+  <div class="card"><h2>🏆 项目价值排名 Top20</h2><div id="table-value-proj" style="overflow-y:auto;max-height:400px"></div></div>
+</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>📊 类型价值分布</h2><div id="chart-value-type" class="chart-box"></div></div>
+  <div class="card"><h2>📊 等级价值分布</h2><div id="chart-value-level" class="chart-box"></div></div>
+</div>
+
+<div class="section-title">十、售前板块</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>📋 售前项目汇总</h2><div id="table-presale-proj" style="overflow-y:auto;max-height:500px"></div></div>
+  <div class="card"><h2>🥧 售前项目工时分布</h2><div id="chart-presale-pie" class="chart-box"></div></div>
+</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>👥 售前人员分布</h2><div id="chart-presale-creator" class="chart-box"></div></div>
+</div>
+
+<!-- 十一、高价值工时明细 -->
+<div class="section-title">十一、高价值工时明细</div>
+<div class="grid2" style="padding-top:16px">
+  <div class="card"><h2>📋 高价值工时 · 项目×类型明细</h2><div id="table-highvalue" style="overflow-y:auto;max-height:500px"></div></div>
+  <div class="card"><h2>📊 高价值工时 · 类型分布</h2><div id="chart-highvalue-type" class="chart-box"></div></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ========== 工具函数 ==========
+  var MC = ['#5B8FF9','#5AD8A6','#F6BD16','#E86452','#6DC8EC','#945FB9','#FF9845','#1E9493','#FF6B6B','#48C9B0'];
+
+  function round(v, d) {
+    var m = Math.pow(10, d || 0);
+    return Math.round(v * m) / m;
+  }
+
+  function initChart(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    var chart = echarts.init(el, 'dark');
+    window.addEventListener('resize', function(){ chart.resize(); });
+    return chart;
+  }
+
+  // ========== 数据校验 ==========
+  if (typeof D === 'undefined') {
+    alert('数据加载失败，请确认 data.js 在同一目录');
+    return;
+  }
+
+  var hasPrev = (typeof D_prev !== 'undefined' && D_prev !== null);
+
+  // 显示数据周期
+  var periodText = (D.minDate || '') + ' ~ ' + (D.maxDate || '');
+  document.getElementById('period').textContent = '数据周期：' + periodText + '  |  记录数：' + (D.records||0) + '  |  工作日：' + (D.workDays||0) + '天';
+
+  // ========== KPI 卡片 ==========
+  (function(){
+    document.getElementById('kpi-total').textContent = round(D.total||0,1) + 'h';
+    document.getElementById('kpi-days').textContent = '工作日：' + (D.workDays||0) + '天  |  日均：' + round(D.allDaily||0,1) + 'h';
+    document.getElementById('kpi-records').textContent = (D.records||0);
+    document.getElementById('kpi-projcnt').textContent = '项目数：' + (D.projCount||0);
+    document.getElementById('kpi-maint').textContent = round(D.maintTotal||0,1) + 'h';
+    document.getElementById('kpi-maint-pct').textContent = '占比：' + round((D.maintTotal||0)/(D.total||1)*100,1) + '%';
+    document.getElementById('kpi-high').textContent = round(D.highValue||0,1) + 'h';
+    document.getElementById('kpi-high-pct').textContent = '产出比：' + (D.highValuePct||0) + '%';
+    document.getElementById('kpi-totalValue').textContent = round((D.totalValue||0),1) + 'h';
+    document.getElementById('kpi-avg-daily').textContent = 'P0日均：' + round(D.p0Daily||0,1) + 'h  |  全员日均：' + round(D.allDaily||0,1) + 'h';
+  })();
+
+  // ========== 一、工作类型分布 ==========
+  (function(){
+    var c = initChart('chart-type-pie');
+    if (c && D.typePie) {
+      var pieData = D.typePie.map(function(i){
+        return { name: i[0], value: i[1], itemStyle: { color: (D.typeColors||{})[i[0]] || null } };
+      });
+      c.setOption({
+        title: { text:'工作类型工时占比', left:'center', top:10, textStyle:{fontSize:14,fontWeight:600} },
+        tooltip: { trigger:'item', formatter:'{b}: {c}h ({d}%)' },
+        legend: { bottom:10, textStyle:{fontSize:12} },
+        series:[{ type:'pie', radius:['40%','70%'], center:['50%','52%'],
+          itemStyle:{borderRadius:6,borderColor:'#fff',borderWidth:2},
+          data: pieData, label:{formatter:'{b}\n{d}%',fontSize:11} }]
+      });
+    }
+    // 明细表
+    var tbl = document.getElementById('table-type');
+    if (tbl && D.typePie) {
+      var html = '<table><tr><th>工作类型</th><th>工时(h)</th><th>占比</th></tr>';
+      D.typePie.forEach(function(i){
+        html += '<tr><td>' + (D.typeColors?('<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+(D.typeColors[i[0]]||'#ccc')+';margin-right:6px;vertical-align:middle;"></span>'):'') + i[0] + '</td><td><strong>' + round(i[1],1) + '</strong></td><td>' + round(i[1]/(D.total||1)*100,1) + '%</td></tr>';
+      });
+      html += '</table>';
+      tbl.innerHTML = html;
+    }
+  })();
+
+  // ========== 二、5月vs6月同比对比分析 ==========
+  (function(){
+    try {
+    var comp = D.comparison;
+    if (!comp) { console.warn('无同比对比数据'); return; }
+
+    // KPI卡片
+    function setKpi(id, value, sub) {
+      var el = document.getElementById(id);
+      var elSub = document.getElementById(id+'-sub');
+      if (el) el.textContent = value;
+      if (elSub) elSub.textContent = sub;
+    }
+    var ck = {};
+    comp.compKpi.forEach(function(x){ ck[x.label] = x; });
+    var cm = comp.prevMonth, cn = comp.currMonth;
+    function chg(v){ return (v>=0?'+':'')+v; }
+
+    var k = ck['总工时(h)'];
+    if (k) setKpi('kpi-comp-total', (k.delta>=0?'📈+':'📉') + k.delta.toFixed(1)+'h', cm+': '+k.prev.toFixed(1)+'h → '+cn+': '+k.curr.toFixed(1)+'h  |  '+chg(k.pct.toFixed(1))+'%');
+
+    k = ck['记录数'];
+    if (k) setKpi('kpi-comp-records', (k.delta>=0?'📈+':'📉') + k.delta + '条', cm+': '+k.prev+' → '+cn+': '+k.curr+'  |  '+chg(k.pct.toFixed(1))+'%');
+
+    k = ck['项目数'];
+    if (k) setKpi('kpi-comp-proj', (k.delta>=0?'📈+':'📉') + k.delta + '个', cm+': '+k.prev+' → '+cn+': '+k.curr+'  |  '+chg(k.pct.toFixed(1))+'%');
+
+    k = ck['日均工时(h)'];
+    if (k) setKpi('kpi-comp-daily', (k.delta>=0?'📈+':'📉') + k.delta.toFixed(1)+'h', cm+': '+k.prev.toFixed(1)+'h → '+cn+': '+k.curr.toFixed(1)+'h  |  '+chg(k.pct.toFixed(1))+'%');
+
+    k = ck['价值工时(h)'];
+    if (k) setKpi('kpi-comp-value', (k.delta>=0?'📈+':'📉') + k.delta.toFixed(1)+'h', cm+': '+k.prev.toFixed(1)+'h → '+cn+': '+k.curr.toFixed(1)+'h  |  '+chg(k.pct.toFixed(1))+'%');
+
+    // 工作类型对比图
+    var c1 = initChart('chart-comp-type');
+    if (c1 && comp.typeCompare) {
+      var typeLabels = comp.typeCompare.map(function(x){ return x.type; });
+      var typeCurr = comp.typeCompare.map(function(x){ return x.curr; });
+      var typePrev = comp.typeCompare.map(function(x){ return x.prev; });
+      c1.setOption({
+        tooltip: {trigger:'axis', axisPointer:{type:'shadow'}},
+        legend: {data:[cn, cm], textStyle:{color:'#9CA3AF'}},
+        grid: {left:'3%',right:'4%',bottom:'3%',containLabel:true},
+        xAxis: {type:'category',data:typeLabels,axisLabel:{fontSize:11,rotate:15}},
+        yAxis: {type:'value',name:'工时(h)',axisLabel:{fontSize:11}},
+        series: [
+          {name:cn, type:'bar', data:typeCurr, itemStyle:{color:'#4A6CF7'}, barGap:'10%', label:{show:true,position:'top',fontSize:10,color:'#4A6CF7'}},
+          {name:cm, type:'bar', data:typePrev, itemStyle:{color:'#A78BFA'}, label:{show:true,position:'top',fontSize:10,color:'#A78BFA'}}
+        ]
+      });
+    }
+
+    // 人员工时对比图
+    var c2 = initChart('chart-comp-creator');
+    if (c2 && comp.creatorCompare) {
+      var crLabels = comp.creatorCompare.map(function(x){ return x.name; });
+      var crCurr = comp.creatorCompare.map(function(x){ return x.curr; });
+      var crPrev = comp.creatorCompare.map(function(x){ return x.prev; });
+      c2.setOption({
+        tooltip: {trigger:'axis', axisPointer:{type:'shadow'}},
+        legend: {data:[cn, cm], textStyle:{color:'#9CA3AF'}},
+        grid: {left:'3%',right:'4%',bottom:'3%',containLabel:true},
+        xAxis: {type:'category',data:crLabels,axisLabel:{fontSize:12}},
+        yAxis: {type:'value',name:'工时(h)',axisLabel:{fontSize:11}},
+        series: [
+          {name:cn, type:'bar', data:crCurr, itemStyle:{color:'#5AD8A6'}, barGap:'10%', label:{show:true,position:'top',fontSize:10,color:'#5AD8A6'}},
+          {name:cm, type:'bar', data:crPrev, itemStyle:{color:'#F6BD16'}, label:{show:true,position:'top',fontSize:10,color:'#F6BD16'}}
+        ]
+      });
+    }
+    } catch(e) { console.error('Section2 JS错误:', e.message); }
+  })();
+
+  // ===== 组员工作类型同比对比（在section二内部） =====
+  (function(){
+    try {
+    var comp2 = D.comparison;
+    if (!comp2 || !comp2.creatorTypeCompare) return;
+
+    var ctc = comp2.creatorTypeCompare;
+    var names = Object.keys(ctc).sort();
+    var cm2 = comp2.prevMonth, cn2 = comp2.currMonth;
+
+    names.forEach(function(name, idx) {
+      // Update card title
+      var labelEl = document.getElementById('comp-ct-label-'+idx);
+      if (labelEl) labelEl.textContent = '👤 ' + name;
+
+      var chartEl = document.getElementById('chart-comp-ct-'+idx);
+      if (!chartEl) return;
+      var chart = echarts.init(chartEl, 'dark');
+
+      var personData = ctc[name];
+      var typeLabels = personData.map(function(x){ return x.type; });
+      var currData = personData.map(function(x){ return x.curr; });
+      var prevData = personData.map(function(x){ return x.prev; });
+      var deltas = personData.map(function(x){ return x.delta; });
+
+      chart.setOption({
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: {type: 'shadow'},
+          formatter: function(params) {
+            var s = params[0].name + '<br/>';
+            params.forEach(function(p){
+              s += p.marker + p.seriesName + ': ' + p.value + 'h<br/>';
+            });
+            var d = deltas[params[0].dataIndex];
+            s += '变化: ' + (d>=0?'+':'') + d.toFixed(1) + 'h';
+            return s;
+          }
+        },
+        legend: {data: [cn2, cm2], textStyle: {color: '#9CA3AF', fontSize: 11}, top: 5},
+        grid: {left: '3%', right: '4%', bottom: '3%', top: '18%', containLabel: true},
+        xAxis: {type: 'category', data: typeLabels, axisLabel: {fontSize: 10, rotate: 20}},
+        yAxis: {type: 'value', name: '工时(h)', axisLabel: {fontSize: 10}},
+        series: [
+          {name: cn2, type: 'bar', data: currData, itemStyle: {color: '#4A6CF7'}, barGap: '15%',
+           label: {show: true, position: 'top', fontSize: 9, color: '#4A6CF7', formatter: function(p){ return p.value>0?p.value+'h':''; }}},
+          {name: cm2, type: 'bar', data: prevData, itemStyle: {color: '#A78BFA'},
+           label: {show: true, position: 'top', fontSize: 9, color: '#A78BFA', formatter: function(p){ return p.value>0?p.value+'h':''; }}}
+        ]
+      });
+
+      window.addEventListener('resize', function(){ chart.resize(); });
+    });
+
+    // Hide unused card slots if fewer than 4 people
+    for (var i = names.length; i < 4; i++) {
+      var card = document.getElementById('comp-ct-label-'+i);
+      if (card) card.parentElement.style.display = 'none';
+    }
+
+    } catch(e) { console.error('CreatorType对比 JS错误:', e.message); }
+  })();
+
+  // ========== 三、项目工时分析 ==========
+  (function(){
+    var c = initChart('chart-proj-top10');
+    if (c && D.projNames) {
+      var top10n = D.projNames.slice(0,10);
+      var top10h = D.projHours.slice(0,10);
+      c.setOption({
+        title:{text:'项目工时 Top10',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'axis',formatter:function(p){var s=p[0].name+'<br/>';p.forEach(function(x){s+=x.marker+x.seriesName+': '+x.value+'h<br/>'});return s;}},
+        grid:{left:30,right:20,top:50,bottom:45},
+        xAxis:{type:'category',data:top10n,axisLabel:{rotate:30,fontSize:11}},
+        yAxis:{type:'value',name:'工时(h)'},
+        series:[{name:'工时',type:'bar',data:top10h,itemStyle:{color:MC[0],borderRadius:[4,4,0,0]},label:{show:true,position:'top',formatter:function(p){return round(p.value,1)+'h'},fontSize:11}}]
+      });
+    }
+    // 明细表
+    var tbl = document.getElementById('table-proj');
+    if (tbl && D.projNames) {
+      var html = '<table><tr><th>排名</th><th>项目</th><th>工时(h)</th><th>维护率</th><th>价值系数</th><th>等级</th></tr>';
+      for (var i=0;i<D.projNames.length;i++) {
+        var lv = D.projLevel?D.projLevel[i]:'';
+        var lvColor = ({'P0':'#EF4444','P1':'#F59E0B','P2':'#5AD8A6','P3':'#5B8FF9'})[lv] || '#999';
+        var vf = D.projValuePct ? round(D.projValuePct[i]/100,1) : 0;
+        html += '<tr><td>'+(i+1)+'</td><td>'+D.projNames[i]+'</td><td><strong>'+round(D.projHours[i],1)+'</strong></td><td>'+round(D.projMaintPct?D.projMaintPct[i]:0,1)+'%</td><td>'+vf+'x</td><td><span class="tag" style="background:'+lvColor+'22;color:'+lvColor+'">'+lv+'</span></td></tr>';
+      }
+      html += '</table>';
+      tbl.innerHTML = html;
+    }
+  })();
+
+  // ========== 四、人员工时分析 ==========
+  (function(){
+    var c = initChart('chart-creator-bar');
+    if (c && D.creatorNames) {
+      var series = (D.workTypes||['维护','项目管理','数字化升级','项目实施','学习/内部例会','售前']).map(function(wt,idx){
+        return {
+          name: wt, type:'bar', stack:'a',
+          data: D.creatorTypeMatrix.map(function(row){return row[idx]||0;}),
+          itemStyle:{color:(D.typeColors||{})[wt]||MC[idx%MC.length]},
+          label:{show:false,position:'inside',formatter:function(p){return p.value>5?round(p.value,1):''},fontSize:10}
+        };
+      });
+      c.setOption({
+        title:{text:'人员工时 × 工作类型',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+        legend:{bottom:5,textStyle:{fontSize:11}},
+        grid:{left:30,right:20,top:50,bottom:50},
+        xAxis:{type:'category',data:D.creatorNames,axisLabel:{fontSize:11}},
+        yAxis:{type:'value',name:'工时(h)'},
+        series: series
+      });
+    }
+    // 价值排名表
+    var tbl1 = document.getElementById('table-creator-value');
+    if (tbl1 && D.creatorValue) {
+      var vHtml = '<table><tr><th>排名</th><th>姓名</th><th>实际工时</th><th>价值工时</th><th>平均价值系数</th><th>价值等级</th></tr>';
+      D.creatorValue.forEach(function(item,i){
+        var grade = item.grade||'';
+        var gc = ({'S':'#EF4444','A':'#F59E0B','B':'#5AD8A6','C':'#5B8FF9','D':'#999'})[grade]||'#999';
+        vHtml += '<tr><td>'+(i+1)+'</td><td>'+item.name+'</td><td>'+round(item.total,1)+'h</td><td><strong>'+round(item.valueWork,1)+'h</strong></td><td>'+round(item.avgFactor,2)+'x</td><td><span class="tag" style="background:'+gc+'22;color:'+gc+'">'+grade+'</span></td></tr>';
+      });
+      vHtml += '</table>';
+      tbl1.innerHTML = vHtml;
+    }
+    // 标准工时达标率表
+    var tbl2 = document.getElementById('table-creator-std');
+    if (tbl2 && D.creatorStd) {
+      var sHtml = '<table><tr><th>姓名</th><th>实际(h)</th><th>标准(h)</th><th>达标率</th><th>状态</th></tr>';
+      D.creatorStd.forEach(function(item){
+        var st = item.status||'';
+        var sc = ({'over':'#10B981','ok':'#5B8FF9','low':'#F59E0B'})[st]||'#999';
+        var stText = ({'over':'超额','ok':'达标','low':'不足'})[st]||st;
+        sHtml += '<tr><td>'+item.name+'</td><td>'+round(item.actual,1)+'</td><td>'+round(item.std,1)+'</td><td>'+round(item.pct,1)+'%</td><td><span class="tag" style="background:'+sc+'22;color:'+sc+'">'+stText+' ('+round(item.diff,1)+'h)</span></td></tr>';
+      });
+      sHtml += '</table>';
+      tbl2.innerHTML = sHtml;
+    }
+  })();
+
+  // ========== 五、项目管理工时分析 ==========
+  (function(){
+    var c1 = initChart('chart-pm-proj');
+    if (c1 && D.pmByProject) {
+      var topProj = D.pmByProject.slice(0,15);
+      c1.setOption({
+        title:{text:'项目PM工时 Top15',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+        grid:{left:30,right:20,top:50,bottom:45},
+        xAxis:{type:'category',data:topProj.map(function(i){return i[0];}),axisLabel:{rotate:30,fontSize:11}},
+        yAxis:{type:'value',name:'工时(h)'},
+        series:[{type:'bar',data:topProj.map(function(i){return i[1];}),itemStyle:{color:MC[1],borderRadius:[4,4,0,0]},label:{show:true,position:'top',fontSize:10}}]
+      });
+    }
+    var c2 = initChart('chart-pm-creator');
+    if (c2 && D.pmByCreator) {
+      c2.setOption({
+        title:{text:'负责人PM工时',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+        grid:{left:30,right:20,top:50,bottom:45},
+        xAxis:{type:'category',data:D.pmByCreator.map(function(i){return i[0];}),axisLabel:{fontSize:11}},
+        yAxis:{type:'value',name:'工时(h)'},
+        series:[{type:'bar',data:D.pmByCreator.map(function(i){return i[1];}),itemStyle:{color:MC[4],borderRadius:[4,4,0,0]},label:{show:true,position:'top',fontSize:10}}]
+      });
+    }
+  })();
+
+  // ========== 六、维护分析 ==========
+  (function(){
+    var c1 = initChart('chart-maint-type');
+    if (c1 && D.maintType) {
+      var pieData = D.maintType.map(function(i){
+        return { name: i[0], value: i[1], itemStyle:{color:(D.typeColors||{})[i[0]]||null} };
+      });
+      c1.setOption({
+        title:{text:'维护类型分布',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'item',formatter:'{b}: {c}h ({d}%)'},
+        legend:{bottom:10,textStyle:{fontSize:11}},
+        series:[{type:'pie',radius:['40%','70%'],center:['50%','52%'],data:pieData,label:{formatter:'{b}\n{c}h',fontSize:11}}]
+      });
+    }
+    var c2 = initChart('chart-maint-biz');
+    if (c2 && D.prodLine) {
+      var pieData2 = D.prodLine.map(function(i){ return {name:i[0],value:i[1]}; });
+      c2.setOption({
+        title:{text:'业务线分布',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'item',formatter:'{b}: {c}h ({d}%)'},
+        legend:{bottom:10,textStyle:{fontSize:11}},
+        series:[{type:'pie',radius:['40%','70%'],center:['50%','52%'],data:pieData2,label:{formatter:'{b}\n{c}h',fontSize:11}}]
+      });
+    }
+    // 维护原因表
+    var tbl1 = document.getElementById('table-maint-reason');
+    if (tbl1 && D.maintReason) {
+      var html = '<table><tr><th>维护原因</th><th>工时(h)</th><th>占比</th></tr>';
+      var totalMaint = D.maintReason.reduce(function(s,i){return s+i[1];},0);
+      D.maintReason.forEach(function(i){
+        html += '<tr><td>'+i[0]+'</td><td><strong>'+round(i[1],1)+'</strong></td><td>'+round(i[1]/totalMaint*100,1)+'%</td></tr>';
+      });
+      html += '</table>';
+      tbl1.innerHTML = html;
+    }
+    var c3 = initChart('chart-maint-level');
+    if (c3 && D.maintLevel) {
+      c3.setOption({
+        title:{text:'维护项目等级分布',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'item',formatter:'{b}: {c}h ({d}%)'},
+        legend:{bottom:10,textStyle:{fontSize:11}},
+        series:[{type:'pie',radius:['40%','70%'],center:['50%','52%'],
+          data:D.maintLevel.map(function(i){return{name:i[0],value:i[1]};}),
+          label:{formatter:'{b}\n{c}h',fontSize:11}}]
+      });
+    }
+  })();
+
+  // ========== 七、热力图 ==========
+  (function(){
+    var c = initChart('chart-heatmap');
+    if (c && D.hmProjs && D.hmTypes && D.hmData) {
+      var maxVal = 0;
+      D.hmData.forEach(function(d){ if(d[2]>maxVal) maxVal=d[2]; });
+      c.setOption({
+        title:{text:'维护工时热力图（Top15维护项目）',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{position:'top',formatter:function(p){return D.hmProjs[p.data[1]]+' × '+D.hmTypes[p.data[0]]+': '+p.data[2]+'h'}},
+        grid:{left:120,right:30,top:50,bottom:80},
+        xAxis:{type:'category',data:D.hmTypes,axisLabel:{rotate:30,fontSize:11}},
+        yAxis:{type:'category',data:D.hmProjs,axisLabel:{fontSize:11}},
+        visualMap:{min:0,max:maxVal||10,inRange:{color:['#EBF5FF','#7AC4FF','#1A73E8']},calculable:true,orient:'horizontal',left:'center',bottom:10},
+        series:[{type:'heatmap',data:D.hmData,label:{show:true,fontSize:10,formatter:function(p){return p.data[2]>0?round(p.data[2],1):'';}}}]
+      });
+    }
+  })();
+
+  // ========== 八、每日趋势 ==========
+  (function(){
+    var c = initChart('chart-daily');
+    if (c && D.dailyDates) {
+      var series = [
+        { name:'维护',      type:'line', data:D.dailyMaint||[],  smooth:true, itemStyle:{color:'#F7664A'} },
+        { name:'项目管理',   type:'line', data:D.dailyPM||[],     smooth:true, itemStyle:{color:'#FA8C16'} },
+        { name:'数字化升级', type:'line', data:D.dailyDigital||[],smooth:true, itemStyle:{color:'#4A6CF7'} },
+        { name:'项目实施',   type:'line', data:D.dailyImpl||[],   smooth:true, itemStyle:{color:'#13C2C2'} },
+        { name:'售前',      type:'line', data:D.dailySale||[],   smooth:true, itemStyle:{color:'#52C41A'} }
+      ];
+      c.setOption({
+        title:{text:'每日工时趋势',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'axis'},
+        legend:{bottom:5,textStyle:{fontSize:11}},
+        grid:{left:30,right:20,top:50,bottom:50},
+        xAxis:{type:'category',data:D.dailyDates,axisLabel:{rotate:45,fontSize:10}},
+        yAxis:{type:'value',name:'工时(h)'},
+        series: series
+      });
+    }
+  })();
+
+  // ========== 九、价值工时分析 ==========
+  (function(){
+    // 人员价值排名
+    var tbl1 = document.getElementById('table-value-creator');
+    if (tbl1 && D.creatorValue2) {
+      var html = '<table><tr><th>排名</th><th>姓名</th><th>实际工时</th><th>价值等级</th></tr>';
+      D.creatorValue2.forEach(function(item,i){
+        var gc = ({'S':'#EF4444','A':'#F59E0B','B':'#5AD8A6','C':'#5B8FF9','D':'#999'})[item.grade]||'#999';
+        var gradeDesc = {'S':'卓越','A':'优秀','B':'良好','C':'一般','D':'待提升'}[item.grade]||item.grade;
+        html += '<tr><td>'+(i+1)+'</td><td>'+item.name+'</td><td><strong>'+round(item.total,1)+'h</strong></td><td><span class="tag" style="background:'+gc+'22;color:'+gc+'">'+item.grade+' ('+gradeDesc+')</span></td></tr>';
+      });
+      html += '</table>';
+      tbl1.innerHTML = html;
+    }
+    // 项目价值Top20
+    var tbl2 = document.getElementById('table-value-proj');
+    if (tbl2 && D.projValue2) {
+      var top20 = D.projValue2.slice(0,20);
+      var html = '<table><tr><th>排名</th><th>项目</th><th>实际工时</th><th>价值等级</th><th>等级</th></tr>';
+      top20.forEach(function(item,i){
+        var gc = ({'S':'#EF4444','A':'#F59E0B','B':'#5AD8A6','C':'#5B8FF9','D':'#999'})[item.grade]||'#999';
+        var gradeDesc = {'S':'卓越','A':'优秀','B':'良好','C':'一般','D':'待提升'}[item.grade]||item.grade;
+        html += '<tr><td>'+(i+1)+'</td><td>'+item.name+'</td><td><strong>'+round(item.total,1)+'h</strong></td><td><span class="tag" style="background:'+gc+'22;color:'+gc+'">'+item.grade+' ('+gradeDesc+')</span></td><td><span class="tag">'+item.lv+'</span></td></tr>';
+      });
+      html += '</table>';
+      tbl2.innerHTML = html;
+    }
+    // 类型价值分布
+    var c1 = initChart('chart-value-type');
+    if (c1 && D.typeValue) {
+      c1.setOption({
+        title:{text:'工作类型价值分布',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+        grid:{left:30,right:20,top:50,bottom:45},
+        xAxis:{type:'category',data:D.typeValue.map(function(i){return i[0];}),axisLabel:{fontSize:11}},
+        yAxis:{type:'value',name:'价值工时'},
+        series:[{type:'bar',data:D.typeValue.map(function(i){return i[1];}),itemStyle:{color:MC[2],borderRadius:[4,4,0,0]},label:{show:true,position:'top',fontSize:10}}]
+      });
+    }
+    // 等级价值分布
+    var c2 = initChart('chart-value-level');
+    if (c2 && D.levelValue) {
+      c2.setOption({
+        title:{text:'项目等级价值分布',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+        grid:{left:30,right:20,top:50,bottom:45},
+        xAxis:{type:'category',data:D.levelValue.map(function(i){return i[0];}),axisLabel:{fontSize:11}},
+        yAxis:{type:'value',name:'价值工时'},
+        series:[{type:'bar',data:D.levelValue.map(function(i){return i[1];}),itemStyle:{color:MC[5],borderRadius:[4,4,0,0]},label:{show:true,position:'top',fontSize:10}}]
+      });
+    }
+  })();
+
+  // ========== 十、售前板块 ==========
+  (function(){
+    // 售前项目汇总表格
+    var tbl = document.getElementById('table-presale-proj');
+    if (tbl && D.preSaleProj) {
+      var html = '<table><tr><th>排名</th><th>项目名称</th><th>项目经理</th><th>售前工时</th><th>占比</th></tr>';
+      D.preSaleProj.forEach(function(item,i){
+        html += '<tr><td>'+(i+1)+'</td><td>'+item[0]+'</td><td>'+item[1]+'</td><td><strong>'+round(item[2],1)+'h</strong></td><td>'+round(item[3],1)+'%</td></tr>';
+      });
+      html += '</table>';
+      tbl.innerHTML = html;
+    }
+    // 售前项目工时饼图
+    var c1 = initChart('chart-presale-pie');
+    if (c1 && D.preSalePie) {
+      c1.setOption({
+        title:{text:'售前项目工时分布（总工时'+round(D.preSaleTotal,1)+'h）',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'item',formatter:'{b}: {c}h ({d}%)'},
+        legend:{type:'scroll',orient:'vertical',right:10,top:40,textStyle:{fontSize:11}},
+        series:[{
+          type:'pie',radius:['35%','65%'],center:['35%','55%'],
+          label:{formatter:'{b}\n{c}h({d}%)',fontSize:11},
+          data:D.preSalePie.map(function(i){return {name:i[0],value:i[1]};})
+        }]
+      });
+    }
+    // 售前人员分布
+    var c2 = initChart('chart-presale-creator');
+    if (c2 && D.preSaleCreator) {
+      c2.setOption({
+        title:{text:'售前人员工时分布',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+        grid:{left:30,right:20,top:50,bottom:45},
+        xAxis:{type:'category',data:D.preSaleCreator.map(function(i){return i[0];}),axisLabel:{fontSize:11,rotate:30}},
+        yAxis:{type:'value',name:'工时(h)'},
+        series:[{type:'bar',data:D.preSaleCreator.map(function(i){return i[1];}),itemStyle:{color:MC[7],borderRadius:[4,4,0,0]},label:{show:true,position:'top',fontSize:10}}]
+      });
+    }
+  })();
+
+
+  // ========== 十一、高价值工时明细 ==========
+  (function(){
+    if (!D.highValueDetail || D.highValueDetail.length === 0) {
+      var el = document.getElementById('table-highvalue');
+      if (el) el.innerHTML = '<div style="color:#9CA3AF;padding:20px;text-align:center">暂无高价值工时数据</div>';
+      return;
+    }
+
+    var hvt = D.highValueDetailTotal || 0;
+    var hvTypes = ['项目管理','项目实施','数字化升级','售前'];
+    var typeColors = {'项目管理':'#FA8C16','项目实施':'#13C2C2','数字化升级':'#4A6CF7','售前':'#52C41A'};
+
+    // 表格：项目×类型
+    var tbl = document.getElementById('table-highvalue');
+    if (tbl) {
+      var html = '<table><tr><th>排名</th><th>项目名称</th><th>总高价值工时</th><th>类型明细</th></tr>';
+      D.highValueDetail.forEach(function(item, i){
+        var typesHtml = item.types.map(function(t){
+          var c = typeColors[t.type] || '#5B8FF9';
+          return '<span class="tag" style="background:'+c+'22;color:'+c+'">'+t.type+'</span> '+round(t.hours,1)+'h';
+        }).join(' &nbsp;');
+        html += '<tr><td>'+(i+1)+'</td><td><strong>'+item.project+'</strong></td><td><strong>'+round(item.total,1)+'h</strong></td><td style="line-height:2.2">'+typesHtml+'</td></tr>';
+      });
+      html += '<tr style="background:#1E2529;font-weight:bold"><td colspan="2">合计</td><td><strong>'+round(hvt,1)+'h</strong></td><td></td></tr>';
+      html += '</table>';
+      tbl.innerHTML = html;
+    }
+
+    // 图：类型分布饼图
+    var c = initChart('chart-highvalue-type');
+    if (c) {
+      var typeTotal = {};
+      D.highValueDetail.forEach(function(item){
+        item.types.forEach(function(t){
+          typeTotal[t.type] = (typeTotal[t.type]||0) + t.hours;
+        });
+      });
+      var typeList = Object.keys(typeTotal).map(function(k){ return [k, round(typeTotal[k],1)]; });
+      typeList.sort(function(a,b){ return b[1]-a[1]; });
+
+      var pieData = typeList.map(function(item){
+        return { name: item[0], value: item[1], itemStyle:{color:typeColors[item[0]]||MC[3]} };
+      });
+
+      c.setOption({
+        title:{text:'高价值工时类型分布（总计 '+round(hvt,1)+'h）',left:'center',top:10,textStyle:{fontSize:14,fontWeight:600}},
+        tooltip:{trigger:'item',formatter:'{b}: {c}h ({d}%)'},
+        legend:{bottom:10,textStyle:{fontSize:11}},
+        series:[{type:'pie',radius:['40%','70%'],center:['50%','52%'],data:pieData,
+          label:{formatter:'{b}\n{c}h ({d}%)',fontSize:11},
+          emphasis:{label:{fontSize:14,fontWeight:'bold'}}
+        }]
+      });
+    }
+  })();
+
+
+
+})();
+</script>
+</body>
+</html>

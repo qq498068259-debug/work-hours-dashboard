@@ -33,7 +33,11 @@ def value_grade(avg_factor):
 
 # ===== 通用处理函数：输入Excel路径，输出数据字典 D =====
 def process_excel(filepath):
-    df = pd.read_excel(filepath, sheet_name='项目工时登记数据')
+    # 尝试项目工时登记数据sheet，回退到Sheet1
+    try:
+        df = pd.read_excel(filepath, sheet_name='项目工时登记数据')
+    except ValueError:
+        df = pd.read_excel(filepath, sheet_name='Sheet1')
 
     # 列名兼容映射
     col_map = {}
@@ -742,8 +746,8 @@ def process_excel(filepath):
     )
 
 # ===== 文件路径 =====
-CURR_FILE  = '【1-6月份】项目工时登记对象导出结果.xlsx'   # 本月文件
-PREV_FILE  = None                                          # 上月文件（暂无）
+CURR_FILE  = '6月份工时.xlsx'   # 本月文件
+PREV_FILE  = '5月份工时.xlsx'    # 上月文件
 
 if not os.path.exists(CURR_FILE):
     raise FileNotFoundError(f'本月文件不存在: {CURR_FILE}')
@@ -759,6 +763,157 @@ if PREV_FILE and os.path.exists(PREV_FILE):
     print(f'  总工时: {round(D_prev["total"],1)}h  记录数: {D_prev["records"]}  工作日: {D_prev["workDays"]}天')
 else:
     print('  上月文件未配置，仅生成本月数据')
+
+# ===== 5月 vs 6月 同比对比分析 =====
+if D_prev is not None:
+    def safe_pct(new_val, old_val):
+        if old_val and old_val != 0:
+            return round((new_val - old_val) / old_val * 100, 1)
+        return 0
+
+    # KPI对比
+    compKpi = [
+        {'label': '总工时(h)', 'curr': round(D['total'],1), 'prev': round(D_prev['total'],1),
+         'delta': round(D['total']-D_prev['total'],1), 'pct': safe_pct(D['total'], D_prev['total'])},
+        {'label': '记录数', 'curr': D['records'], 'prev': D_prev['records'],
+         'delta': D['records']-D_prev['records'], 'pct': safe_pct(D['records'], D_prev['records'])},
+        {'label': '项目数', 'curr': D['projCount'], 'prev': D_prev['projCount'],
+         'delta': D['projCount']-D_prev['projCount'], 'pct': safe_pct(D['projCount'], D_prev['projCount'])},
+        {'label': '工作日(天)', 'curr': D['workDays'], 'prev': D_prev['workDays'],
+         'delta': D['workDays']-D_prev['workDays'], 'pct': safe_pct(D['workDays'], D_prev['workDays'])},
+        {'label': '日均工时(h)', 'curr': round(D['total']/D['workDays'],1) if D['workDays']>0 else 0,
+         'prev': round(D_prev['total']/D_prev['workDays'],1) if D_prev['workDays']>0 else 0,
+         'delta': round(D['total']/D['workDays']-D_prev['total']/D_prev['workDays'],1) if D['workDays']>0 and D_prev['workDays']>0 else 0,
+         'pct': safe_pct(D['total']/D['workDays'], D_prev['total']/D_prev['workDays']) if D['workDays']>0 and D_prev['workDays']>0 else 0},
+        {'label': '维护工时(h)', 'curr': round(D['maintTotal'],1), 'prev': round(D_prev['maintTotal'],1),
+         'delta': round(D['maintTotal']-D_prev['maintTotal'],1), 'pct': safe_pct(D['maintTotal'], D_prev['maintTotal'])},
+        {'label': '高价值工时(h)', 'curr': round(D['highValue'],1), 'prev': round(D_prev['highValue'],1),
+         'delta': round(D['highValue']-D_prev['highValue'],1), 'pct': safe_pct(D['highValue'], D_prev['highValue'])},
+        {'label': '高价值占比(%)', 'curr': D['highValuePct'], 'prev': D_prev['highValuePct'],
+         'delta': round(D['highValuePct']-D_prev['highValuePct'],1), 'pct': 0},
+        {'label': '价值工时(h)', 'curr': round(D['totalValue'],1), 'prev': round(D_prev['totalValue'],1),
+         'delta': round(D['totalValue']-D_prev['totalValue'],1), 'pct': safe_pct(D['totalValue'], D_prev['totalValue'])},
+    ]
+
+    # 工作类型对比
+    workTypesAll = ['维护','项目管理','数字化升级','项目实施','学习/内部例会','售前']
+    typeCompare = []
+    for wt in workTypesAll:
+        curr_h = round(sum([x[1] for x in D['typePie'] if x[0]==wt]), 1)
+        prev_h = round(sum([x[1] for x in D_prev['typePie'] if x[0]==wt]), 1)
+        typeCompare.append({
+            'type': wt,
+            'curr': curr_h, 'prev': prev_h,
+            'delta': round(curr_h - prev_h, 1),
+            'pct': safe_pct(curr_h, prev_h)
+        })
+    # for chart: curr series and prev series
+    compTypeCurr = [x['curr'] for x in typeCompare]
+    compTypePrev = [x['prev'] for x in typeCompare]
+
+    # 人员对比
+    allCreators = list(set(D['creatorNames'] + D_prev['creatorNames']))
+    creatorCompare = []
+    for name in allCreators:
+        curr_h = 0; prev_h = 0
+        try:
+            idx = D['creatorNames'].index(name)
+            curr_h = D['creatorTotalHours'][idx]
+        except ValueError: pass
+        try:
+            idx = D_prev['creatorNames'].index(name)
+            prev_h = D_prev['creatorTotalHours'][idx]
+        except ValueError: pass
+        creatorCompare.append({
+            'name': name,
+            'curr': round(curr_h,1), 'prev': round(prev_h,1),
+            'delta': round(curr_h-prev_h,1),
+            'pct': safe_pct(curr_h, prev_h)
+        })
+    creatorCompare.sort(key=lambda x: -x['curr'])
+
+    # 项目Top变化（按工时升降排）
+    allProjs = {}
+    for i,n in enumerate(D['projNames']):
+        allProjs[n] = {'curr': D['projHours'][i], 'prev': 0}
+    for i,n in enumerate(D_prev['projNames']):
+        if n not in allProjs:
+            allProjs[n] = {'curr': 0, 'prev': D_prev['projHours'][i]}
+        else:
+            allProjs[n]['prev'] = D_prev['projHours'][i]
+    projChanges = []
+    for n, v in allProjs.items():
+        projChanges.append({
+            'name': n,
+            'curr': round(v['curr'],1), 'prev': round(v['prev'],1),
+            'delta': round(v['curr']-v['prev'],1),
+            'pct': safe_pct(v['curr'], v['prev'])
+        })
+    projChanges.sort(key=lambda x: x['delta'])
+    projTopDown = projChanges[:5]   # 下降最多
+    projChanges.sort(key=lambda x: -x['delta'])
+    projTopUp = projChanges[:5]     # 上升最多
+
+    # 人员×工作类型交叉对比
+    # 直接读取原始Excel数据，避免依赖process_excel的中间产物
+    import pandas as pd
+    xls6 = pd.ExcelFile(CURR_FILE)
+    df6 = pd.read_excel(CURR_FILE, sheet_name=xls6.sheet_names[0])
+    xls5 = pd.ExcelFile(PREV_FILE)
+    df5 = pd.read_excel(PREV_FILE, sheet_name=xls5.sheet_names[0])
+
+    # 统一列名
+    col6 = '工作时长' if '工作时长' in df6.columns else '工时'
+    col5 = '工作时长' if '工作时长' in df5.columns else '工时'
+
+    allCreators = sorted(set(df6['创建人'].dropna().unique().tolist() + df5['创建人'].dropna().unique().tolist()))
+    workTypesForCompare = ['维护','项目管理','项目实施','数字化升级','学习/内部例会','售前','团队管理/内部协同']
+
+    creatorTypeCompare = {}
+    for name in allCreators:
+        personData = []
+        # 6月
+        p6 = df6[df6['创建人'] == name]
+        type6 = {}
+        for wt, g in p6.groupby('工作类型'):
+            type6[wt] = round(g[col6].sum(), 1)
+        # 5月
+        p5 = df5[df5['创建人'] == name]
+        type5 = {}
+        for wt, g in p5.groupby('工作类型'):
+            type5[wt] = round(g[col5].sum(), 1)
+
+        for wt in workTypesForCompare:
+            curr_h = type6.get(wt, 0)
+            prev_h = type5.get(wt, 0)
+            if curr_h > 0 or prev_h > 0:
+                personData.append({
+                    'type': wt,
+                    'curr': curr_h,
+                    'prev': prev_h,
+                    'delta': round(curr_h - prev_h, 1),
+                    'pct': safe_pct(curr_h, prev_h)
+                })
+        if personData:
+            creatorTypeCompare[name] = personData
+
+    comparison = {
+        'currMonth': '6月', 'prevMonth': '5月',
+        'compKpi': compKpi,
+        'typeCompare': typeCompare,
+        'compTypeCurr': compTypeCurr,
+        'compTypePrev': compTypePrev,
+        'creatorCompare': creatorCompare,
+        'projTopUp': projTopUp,
+        'projTopDown': projTopDown,
+        'workTypes': workTypesAll,
+        'creatorTypeCompare': creatorTypeCompare,
+    }
+    D['comparison'] = comparison
+    print('  5月vs6月同比对比数据已生成')
+    # key insights
+    deltas = [(x['label'], x['delta'], x['pct']) for x in compKpi]
+    print(f'  关键变化：总工时 {deltas[0][1]:+.1f}h ({deltas[0][2]:+.1f}%)，记录数 {deltas[1][1]:+d} ({deltas[1][2]:+.1f}%)')
 
 # ===== 输出 data.js =====
 def to_js(obj, indent=0):
